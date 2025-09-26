@@ -456,7 +456,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             *s = !*s;
             if *s {
                 let mut order = filtered_indices.lock().unwrap().clone();
-                order.shuffle(&mut rand::thread_rng());
+                order.shuffle(&mut rand::rng());
                 *shuffle_order_arc.lock().unwrap() = order;
             }
             if let Some(ui) = ui_handle.upgrade() { ui.set_shuffle(*s); }
