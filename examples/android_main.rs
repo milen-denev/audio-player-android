@@ -8,7 +8,7 @@ pub fn main() {
         // Initialize logging to logcat
         android_logger::init_once(
             android_logger::Config::default()
-                .with_min_level(log::Level::Info)
+                .with_max_level(log::Level::Error)
                 .with_tag("rust-audio-player"),
         );
         log::info!("Android main() started");
