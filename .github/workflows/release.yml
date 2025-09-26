@@ -17,6 +17,11 @@ jobs:
         with: { fetch-depth: 0 }
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+      - name: Setup Java (for keytool)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
       - name: Install Android NDK (r26d)
         id: setup-ndk
         uses: nttld/setup-ndk@v1
@@ -24,6 +29,35 @@ jobs:
           ndk-version: r26d
       - name: Install cargo-apk
         run: cargo install cargo-apk --locked
+      - name: Set up signing keystore
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYPATH="$RUNNER_TEMP/release.keystore"
+          if [[ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]]; then
+            echo "Using provided release keystore from secrets"
+            printf "%s" "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$KEYPATH"
+            KEYSTORE_PASS='${{ secrets.ANDROID_KEYSTORE_PASSWORD }}'
+            KEY_ALIAS='${{ secrets.ANDROID_KEY_ALIAS }}'
+            KEY_PASS='${{ secrets.ANDROID_KEY_PASSWORD }}'
+          else
+            echo "No keystore secret provided; generating a temporary CI keystore (NOT for production)"
+            KEYSTORE_PASS='android'
+            KEY_ALIAS='release'
+            KEY_PASS='android'
+            keytool -genkeypair -v \
+              -storetype JKS \
+              -keystore "$KEYPATH" \
+              -storepass "$KEYSTORE_PASS" \
+              -keypass "$KEY_PASS" \
+              -alias "$KEY_ALIAS" \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=CI, OU=CI, O=CI, L=CI, S=CI, C=US"
+          fi
+          echo "CARGO_APK_RELEASE_KEYSTORE=$KEYPATH" >> "$GITHUB_ENV"
+          echo "CARGO_APK_RELEASE_KEYSTORE_PASSWORD=$KEYSTORE_PASS" >> "$GITHUB_ENV"
+          echo "CARGO_APK_RELEASE_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "CARGO_APK_RELEASE_KEY_PASSWORD=$KEY_PASS" >> "$GITHUB_ENV"
       - name: Add Android Rust targets
         run: |
           rustup target add aarch64-linux-android armv7-linux-androideabi
