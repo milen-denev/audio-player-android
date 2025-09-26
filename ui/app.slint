@@ -1,0 +1,146 @@
+import { VerticalBox, HorizontalBox, LineEdit, Button, Slider, ListView, ScrollView } from "std-widgets.slint";
+
+export struct Song { title: string }
+
+component SongRow inherits Rectangle {
+    in property <string> title;
+    in property <bool> selected: false;
+    callback clicked();
+    callback activated();
+
+    height: 40px;
+    border-radius: 6px;
+    background: selected ? #3078f0aa : #00000000;
+
+    HorizontalBox {
+        padding: 8px;
+        Text { text: title; }
+    }
+
+    TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+export component AppWindow inherits Window {
+    width: 400px;
+    height: 700px;
+    title: "Rust Audio Player";
+
+    in property <[Song]> songs;
+    in property <int> selected-index: -1;
+    in property <string> status-text: "";
+    in property <string> time-text: "";
+    in property <float> progress: 0.0; // 0..1
+    in property <bool> seeking: false;
+    in property <bool> is-playing: false;
+    in property <string> search: "";
+    in property <bool> repeat-one: false;
+    in property <bool> shuffle: false;
+    in property <bool> eq-visible: false;
+
+    callback request-prev();
+    callback request-play-pause();
+    callback request-next();
+    callback request-stop();
+    callback request-select(index: int);
+    callback request-seek(value: float);
+    callback seek-released();
+    callback search-changed(text: string);
+    callback toggle-repeat();
+    callback toggle-shuffle();
+    callback toggle-eq();
+    callback eq-band-changed(index: int, value: float);
+
+    VerticalBox {
+        spacing: 8px;
+        padding: 12px;
+
+        HorizontalBox {
+            spacing: 12px;
+            horizontal-stretch: 1;
+            Text { text: "Rust Audio Player"; font-size: 20px; horizontal-stretch: 1; }
+        }
+
+        HorizontalBox {
+            spacing: 12px;
+            Button { text: "⏮"; clicked => { root.request-prev(); } }
+            Button { text: root.is-playing ? "⏸" : "▶"; clicked => { root.request-play-pause(); } }
+            Button { text: "⏭"; clicked => { root.request-next(); } }
+            Button { text: "⏹"; clicked => { root.request-stop(); } }
+            // Repeat / Shuffle / EQ
+            Button { text: root.repeat-one ? "🔁1" : "🔁"; clicked => { root.toggle-repeat(); } }
+            Button { text: "🔀"; clicked => { root.toggle-shuffle(); } }
+            Button { text: root.eq-visible ? "EQ✓" : "EQ"; clicked => { root.toggle-eq(); } }
+        }
+
+        HorizontalBox {
+            spacing: 8px;
+            Slider {
+                value: root.progress;
+                minimum: 0;
+                maximum: 1;
+                changed => { root.request-seek(self.value); }
+                released => { root.seek-released(); }
+                horizontal-stretch: 1;
+            }
+            Text { text: root.time-text; }
+        }
+
+        HorizontalBox {
+            spacing: 8px;
+            LineEdit {
+                placeholder-text: "Search songs...";
+                text: root.search;
+                edited => { root.search-changed(self.text); }
+                horizontal-stretch: 1;
+            }
+            Button { text: "Clear"; clicked => { root.search-changed(""); } }
+        }
+
+        ScrollView {
+            VerticalBox {
+                ListView {
+                    for song[index] in songs: SongRow {
+                        title: song.title;
+                        selected: index == root.selected-index;
+                        clicked => { root.request-select(index); }
+                        activated => { root.request-select(index); }
+                    }
+                }
+            }
+        }
+
+        Text { text: root.status-text; }
+
+        // Simple EQ panel
+        if (root.eq-visible) : Rectangle {
+            height: 260px;
+            background: #20202040;
+            border-radius: 8px;
+            padding: 8px;
+
+            VerticalBox {
+                spacing: 6px;
+                Text { text: "Equalizer (10 bands)"; }
+                // Bands: 31, 62, 125, 250, 500, 1k, 2k, 4k, 8k, 16k
+                HorizontalBox {
+                    spacing: 8px;
+                    VerticalBox { Text { text: "31Hz"; } Slider { minimum: 0; maximum: 1; value: 0.5; changed => { root.eq-band-changed(0, self.value); } } }
+                    VerticalBox { Text { text: "62Hz"; } Slider { minimum: 0; maximum: 1; value: 0.5; changed => { root.eq-band-changed(1, self.value); } } }
+                    VerticalBox { Text { text: "125Hz"; } Slider { minimum: 0; maximum: 1; value: 0.5; changed => { root.eq-band-changed(2, self.value); } } }
+                    VerticalBox { Text { text: "250Hz"; } Slider { minimum: 0; maximum: 1; value: 0.5; changed => { root.eq-band-changed(3, self.value); } } }
+                    VerticalBox { Text { text: "500Hz"; } Slider { minimum: 0; maximum: 1; value: 0.5; changed => { root.eq-band-changed(4, self.value); } } }
+                    VerticalBox { Text { text: "1k"; } Slider { minimum: 0; maximum: 1; value: 0.5; changed => { root.eq-band-changed(5, self.value); } } }
+                    VerticalBox { Text { text: "2k"; } Slider { minimum: 0; maximum: 1; value: 0.5; changed => { root.eq-band-changed(6, self.value); } } }
+                    VerticalBox { Text { text: "4k"; } Slider { minimum: 0; maximum: 1; value: 0.5; changed => { root.eq-band-changed(7, self.value); } } }
+                    VerticalBox { Text { text: "8k"; } Slider { minimum: 0; maximum: 1; value: 0.5; changed => { root.eq-band-changed(8, self.value); } } }
+                    VerticalBox { Text { text: "16k"; } Slider { minimum: 0; maximum: 1; value: 0.5; changed => { root.eq-band-changed(9, self.value); } } }
+                }
+                Text { text: "Tip: 0.5 = 0 dB; range -12…+12 dB"; }
+            }
+        }
+    }
+}
+
+// end

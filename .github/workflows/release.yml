@@ -1,0 +1,92 @@
+name: Mobile Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    name: Build Android (AAR + JNI libs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+      - name: Install Android NDK (r26d)
+        id: setup-ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26d
+      - name: Build Android libraries
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+          cargo ndk -t armeabi-v7a -t arm64-v8a -t x86 -t x86_64 -p 21 build --release
+      - name: Upload Android artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-libs
+          path: |
+            target/aarch64-linux-android/release/*.so
+            target/armv7-linux-androideabi/release/*.so
+            target/i686-linux-android/release/*.so
+            target/x86_64-linux-android/release/*.so
+          if-no-files-found: error
+
+  ios:
+    name: Build iOS (static library)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Add iOS targets
+        run: |
+          rustup target add aarch64-apple-ios x86_64-apple-ios aarch64-apple-ios-sim
+      - name: Build iOS static libraries
+        run: |
+          cargo build --release --target aarch64-apple-ios
+          cargo build --release --target aarch64-apple-ios-sim
+          cargo build --release --target x86_64-apple-ios
+      - name: Create XCFramework
+        run: |
+          mkdir -p ios
+          lipo -create -output ios/librust_audio_player.sim.a target/aarch64-apple-ios-sim/release/librust_audio_player.a target/x86_64-apple-ios/release/librust_audio_player.a
+          xcodebuild -create-xcframework \
+            -library target/aarch64-apple-ios/release/librust_audio_player.a \
+            -library ios/librust_audio_player.sim.a \
+            -output ios/rust_audio_player.xcframework
+      - name: Upload iOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-xcframework
+          path: ios/rust_audio_player.xcframework
+          if-no-files-found: error
+
+  release:
+    needs: [android, ios]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/android-libs/*
+            artifacts/ios-xcframework/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
