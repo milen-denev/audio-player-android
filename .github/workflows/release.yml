@@ -24,6 +24,9 @@ jobs:
           ndk-version: r26d
       - name: Install cargo-apk
         run: cargo install cargo-apk --locked
+      - name: Add Android Rust targets
+        run: |
+          rustup target add aarch64-linux-android armv7-linux-androideabi
       - name: Build release APK
         env:
           # Align all common NDK env vars to the installed NDK to avoid mismatches
@@ -31,7 +34,7 @@ jobs:
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
-          cargo apk build --release
+          cargo apk build --example android_main --features android-entry --release
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
