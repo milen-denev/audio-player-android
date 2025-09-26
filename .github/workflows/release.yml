@@ -26,10 +26,14 @@ jobs:
           ndk-version: r26d
       - name: Build Android libraries
         env:
+          # Align all common NDK env vars to the installed NDK to avoid mismatches
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
-          cargo ndk -t armeabi-v7a -t arm64-v8a -t x86 -t x86_64 -p 21 build --release
+          # cargo-ndk v4 changed the platform flag: use -P (not -p) to set API level
+          cargo ndk -P 21 -t armeabi-v7a -t arm64-v8a -t x86 -t x86_64 build --release
       - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
         with:
