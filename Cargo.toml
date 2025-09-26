@@ -1,5 +1,5 @@
 [package]
-name = "rust-audio-player"
+name = "rust-audio-player-android"
 version = "0.1.3"
 edition = "2024"
 
@@ -22,7 +22,7 @@ lto = "fat"
 slint-build = { version = "1.13.1" }
 
 [lib]
-name = "rust_audio_player"
+name = "rust_audio_player_android"
 crate-type = ["cdylib", "staticlib", "rlib"]
 required-features = []
 
