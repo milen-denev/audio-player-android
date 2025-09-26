@@ -1,12 +1,10 @@
-# Rust Audio Player (Mobile‑focused)
+# Rust Audio Player (Android)
 
-A simplified mobile‑targeted audio player core using Slint for UI and Rodio + Symphonia for audio playback/decoding.
+A simple Android‑focused audio player using Slint for UI and Rodio + Symphonia for audio playback/decoding.
 
 - UI: Slint 1.13 (compiled from `ui/app.slint`)
 - Audio: Rodio 0.21 with Symphonia decoders
-- Targets: Android and iOS (library outputs for embedding in host apps)
-
-This repository now builds a library (no desktop binary) suitable for integration into Android and iOS apps. A minimal Slint UI is provided and wired to playback controls, but packaging and host‑app glue are left to the platform projects.
+- Target: Android APK (built with cargo‑apk)
 
 ## Features
 
@@ -32,57 +30,31 @@ Optimized:
 cargo build --release
 ```
 
-Outputs are libraries (cdylib/staticlib/rlib). There is no desktop `main` binary in this branch.
+Outputs are an installable Android APK (via `cargo apk`). There is no desktop `main` binary.
 
-### Android
+### Android (APK)
 
-We use `cargo-ndk` in CI to build `.so` libraries for common ABIs. Locally:
-
-```powershell
-# Install cargo-ndk once
-cargo install cargo-ndk --locked
-
-# Build release libs for common ABIs (adjust NDK path/targets as needed)
-rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
-cargo ndk -t armeabi-v7a -t arm64-v8a -t x86 -t x86_64 -p 21 build --release
-```
-
-You’ll get `.so` files under `target/<triple>/release/` named like `librust_audio_player.so`. To consume them, create a small Android project, add JNI bindings as needed, and package into an AAR. The CI workflow uploads these `.so` files as artifacts on tag pushes.
-
-### iOS
-
-CI builds static libraries for device and simulator, then bundles them into an XCFramework. Locally you can do:
+We use `cargo-apk` to build an installable APK. Locally:
 
 ```powershell
-rustup target add aarch64-apple-ios x86_64-apple-ios aarch64-apple-ios-sim
-cargo build --release --target aarch64-apple-ios
-cargo build --release --target aarch64-apple-ios-sim
-cargo build --release --target x86_64-apple-ios
+# Install cargo-apk once
+cargo install cargo-apk --locked
 
-# Create an XCFramework (macOS only)
-lipo -create -output ios/librust_audio_player.sim.a target/aarch64-apple-ios-sim/release/librust_audio_player.a target/x86_64-apple-ios/release/librust_audio_player.a
-xcodebuild -create-xcframework \
-  -library target/aarch64-apple-ios/release/librust_audio_player.a \
-  -library ios/librust_audio_player.sim.a \
-  -output ios/rust_audio_player.xcframework
+# Build a release APK
+cargo apk build --release
 ```
 
-Integrate the XCFramework into an Xcode project and provide Swift/Obj‑C glue code to drive the Rust API as needed.
+The resulting APK can be found under `target/android/release/` (or similar) and can be installed via `adb install`.
 
 ## CI/CD
 
-The GitHub Actions workflow `.github/workflows/release.yml` runs on tag pushes (`v*`) and produces:
-
-- Android: `.so` libraries for arm64‑v8a, armeabi‑v7a, x86, x86_64
-- iOS: `rust_audio_player.xcframework`
-
-Artifacts are attached to the GitHub release created by the workflow.
+The GitHub Actions workflow `.github/workflows/release.yml` runs on tag pushes (`v*`) and produces an installable Android APK, which is uploaded as a GitHub Release asset.
 
 ## Notes and Limitations
 
-- This branch removes desktop features such as folder pickers, persistent settings, and theme toggles.
+- This code removes desktop features such as folder pickers, persistent settings, and theme toggles.
 - Permissions and file access on mobile are platform‑specific; the simple "music" directory approach is for testing only.
-- For a production app, add JNI/Swift wrappers and proper packaging (AAR/Framework), app permissions, and a platform file‑access strategy.
+- For a production app, add proper Android permissions and a platform file‑access strategy.
 
 ## Credits
 

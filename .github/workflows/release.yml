@@ -1,4 +1,4 @@
-name: Mobile Release
+name: Android Release
 
 on:
   push:
@@ -9,44 +9,39 @@ permissions:
   contents: write
 
 jobs:
-  android:
-    name: Build Android (AAR + JNI libs)
+  build-apk:
+    name: Build Android APK
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-      - name: Install cargo-ndk
-        run: cargo install cargo-ndk --locked
       - name: Install Android NDK (r26d)
         id: setup-ndk
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: r26d
-      - name: Build Android libraries
+      - name: Install cargo-apk
+        run: cargo install cargo-apk --locked
+      - name: Build release APK
         env:
           # Align all common NDK env vars to the installed NDK to avoid mismatches
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
-          rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
-          # Use API level 26+ so the AAudio library is available for linking
-          cargo ndk -P 26 -t armeabi-v7a -t arm64-v8a -t x86 -t x86_64 build --release
-      - name: Upload Android artifacts
+          cargo apk build --release
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: android-libs
+          name: android-apk
           path: |
-            target/aarch64-linux-android/release/*.so
-            target/armv7-linux-androideabi/release/*.so
-            target/i686-linux-android/release/*.so
-            target/x86_64-linux-android/release/*.so
+            **/*.apk
           if-no-files-found: error
 
   release:
-    needs: [android]
+    needs: [build-apk]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -59,6 +54,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/android-libs/*
+            artifacts/android-apk/**/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
