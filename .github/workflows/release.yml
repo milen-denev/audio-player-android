@@ -46,7 +46,7 @@ jobs:
             KEY_ALIAS='release'
             KEY_PASS='android'
             keytool -genkeypair -v \
-              -storetype JKS \
+              -storetype PKCS12 \
               -keystore "$KEYPATH" \
               -storepass "$KEYSTORE_PASS" \
               -keypass "$KEY_PASS" \
@@ -68,6 +68,11 @@ jobs:
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
+          # Prefer ANDROID_HOME to silence deprecation warnings from cargo-apk
+          if [ -n "${ANDROID_SDK_ROOT:-}" ]; then
+            export ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+            unset ANDROID_SDK_ROOT
+          fi
           cargo apk build --example android_main --features android-entry --release
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

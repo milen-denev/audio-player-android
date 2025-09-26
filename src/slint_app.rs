@@ -63,7 +63,8 @@ impl<S: rodio::Source<Item = f32>> rodio::Source for EqSource<S> { fn channels(&
 
 // ===== Audio Engine =====
 struct AudioEngine {
-    stream: rodio::stream::OutputStream,
+    // Lazily initialized to avoid failing UI startup on platforms where audio output isn't immediately available (e.g., Android).
+    stream: Option<rodio::stream::OutputStream>,
     sink: Option<rodio::Sink>,
     current_path: Option<PathBuf>,
     duration: Option<Duration>,
@@ -74,11 +75,9 @@ struct AudioEngine {
 }
 
 impl AudioEngine {
-    fn new() -> Result<Self, String> {
-        let stream = rodio::OutputStreamBuilder::open_default_stream()
-            .map_err(|e| format!("Audio output error: {e}"))?;
-        Ok(Self {
-            stream,
+    fn new() -> Self {
+        Self {
+            stream: None,
             sink: None,
             current_path: None,
             duration: None,
@@ -86,7 +85,16 @@ impl AudioEngine {
             paused_at: None,
             position_offset: Duration::ZERO,
             eq: Equalizer::default(),
-        })
+        }
+    }
+
+    fn ensure_stream(&mut self) -> Result<(), String> {
+        if self.stream.is_none() {
+            let stream = rodio::OutputStreamBuilder::open_default_stream()
+                .map_err(|e| format!("Audio output error: {e}"))?;
+            self.stream = Some(stream);
+        }
+        Ok(())
     }
 
     fn stop(&mut self) {
@@ -103,17 +111,21 @@ impl AudioEngine {
         if let Some(sink) = self.sink.take() { sink.stop(); }
 
         let file = std::fs::File::open(path).map_err(|e| format!("Failed to open file: {e}"))?;
-    let decoder = rodio::Decoder::try_from(file).map_err(|e| format!("Failed to decode audio: {e}"))?;
+        let decoder = rodio::Decoder::try_from(file).map_err(|e| format!("Failed to decode audio: {e}"))?;
         let same_track = self.current_path.as_ref().is_some_and(|p| p == path);
         if !same_track || self.duration.is_none() {
             self.duration = decoder.total_duration().or_else(|| probe_duration_with_symphonia(path));
         }
 
-    let source = decoder.skip_duration(position);
-    // Apply EQ to f32 samples (Decoder outputs f32 in rodio 0.21)
-    let gains = self.eq.snapshot();
-    let source = EqSource::new(source, gains);
-        let sink = rodio::Sink::connect_new(&self.stream.mixer());
+        // Ensure we have an audio output stream before attempting to play
+        self.ensure_stream()?;
+
+        let source = decoder.skip_duration(position);
+        // Apply EQ to f32 samples (Decoder outputs f32 in rodio 0.21)
+        let gains = self.eq.snapshot();
+        let source = EqSource::new(source, gains);
+        let stream = self.stream.as_ref().ok_or("Audio stream not initialized")?;
+        let sink = rodio::Sink::connect_new(&stream.mixer());
         sink.append(source);
         self.sink = Some(sink);
         self.current_path = Some(path.to_path_buf());
@@ -186,7 +198,16 @@ struct SongItem { title: String, path: PathBuf }
 fn format_time(dur: Duration) -> String { let secs = dur.as_secs(); format!("{:02}:{:02}", secs / 60, secs % 60) }
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let ui = AppWindow::new()?;
+    // Try creating the UI with the default renderer. If that fails (common on some Android devices
+    // when OpenGL ES initialization fails), retry with the software renderer to avoid a black screen.
+    let ui = match AppWindow::new() {
+        Ok(u) => u,
+        Err(e) => {
+            eprintln!("Slint UI init failed with default renderer: {e}. Retrying with software renderer...");
+            unsafe { std::env::set_var("SLINT_RENDERER", "software") };
+            AppWindow::new()?
+        }
+    };
 
     // For mobile, scanning arbitrary folders is platform-specific. As a simple approach,
     // look for an "music" folder within the app's working directory or bundled assets.
@@ -223,7 +244,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let model_songs = songs.iter().map(|s| Song{ title: SharedString::from(s.title.clone())}).collect::<Vec<_>>();
     ui.set_songs(slint::ModelRc::new(slint::VecModel::from(model_songs)));
 
-    let engine = Arc::new(Mutex::new(AudioEngine::new().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?));
+    // Don't fail the UI if audio backend isn't ready; initialize audio lazily on first playback.
+    let engine = Arc::new(Mutex::new(AudioEngine::new()));
+    // Show an initial status so we can verify UI renders on startup
+    ui.set_status_text(SharedString::from(format!("Loaded {} song(s)", songs.len())));
     let selected = Arc::new(Mutex::new(None::<usize>));
     let search = Arc::new(Mutex::new(String::new()));
 

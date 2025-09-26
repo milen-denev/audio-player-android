@@ -4,11 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-slint = { version = "1.13.1", default-features = false, features = ["backend-winit", "renderer-femtovg", "compat-1-2"] }
+slint = { version = "1.13.1", default-features = false, features = ["backend-winit", "renderer-femtovg", "renderer-software", "compat-1-2"] }
 rodio = { version = "0.21.1", features = ["symphonia-all"] }
 symphonia = { version = "0.5.4", features = ["all"] }
 rand = "0.9.2"
 ndk-glue = { version = "0.7", optional = true }
+log = "0.4"
+android_logger = { version = "0.15", optional = true }
 
 [profile.release]
 opt-level = 3
@@ -58,4 +60,4 @@ crate-type = ["cdylib"]
 required-features = ["android-entry"]
 
 [features]
-android-entry = ["ndk-glue"]
+android-entry = ["ndk-glue", "android_logger"]
